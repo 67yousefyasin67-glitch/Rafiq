@@ -520,8 +520,11 @@ section>:nth-child(2){animation-delay:.05s}section>:nth-child(3){animation-delay
   <div class="sub">تذكير الأذكار</div>
   <div class="nrow"><span>أذكار الصباح (بعد الفجر بنصف ساعة)</span><button class="tgl" id="nad0" aria-label="أذكار الصباح"></button></div>
   <div class="nrow"><span>أذكار المساء (بعد العصر بنصف ساعة)</span><button class="tgl" id="nad1" aria-label="أذكار المساء"></button></div>
+  <div class="sub">الصلاة على النبي</div>
+  <div class="nrow"><span>تنبيه "صلّ على النبي" كل ٥ دقايق</span><button class="tgl" id="nsl" aria-label="الصلاة على النبي كل ٥ دقايق"></button></div>
   <button class="enable" id="ne">تفعيل الإشعارات</button>
   <button class="enable" id="ntest" style="background:transparent;color:var(--ink);border:1.5px solid var(--brass);box-shadow:none">تجربة التنبيه</button>
+  <button class="enable" id="ntest2" style="background:transparent;color:var(--ink);border:1.5px solid var(--brass);box-shadow:none">تجربة صوت الصلاة على النبي</button>
   <div class="note" id="nst"></div>
 </section>
 <section id="s-adhkar" hidden>
@@ -846,21 +849,27 @@ function drawCal(){
 $('cn').onclick=()=>{CM++;drawCal()};$('cp').onclick=()=>{CM--;drawCal()};
 
 /* notifications */
-NS={on:[1,1,1,1,1],lead:0,snd:1,ad:[1,1]};
+NS={on:[1,1,1,1,1],lead:0,snd:1,ad:[1,1],sl:1};
 try{const n=JSON.parse(localStorage.getItem('notif')||'null');if(n)NS=Object.assign(NS,n)}catch(e){}
 const saveN=()=>{try{localStorage.setItem('notif',JSON.stringify(NS))}catch(e){};setTimeout(()=>{try{sched()}catch(e){}},0)};
 function drawNotify(){
   $('nl').innerHTML=PN.map((n,i)=>`<div class="nrow" style="animation-delay:${i*.06}s"><span>${n}</span><button class="tgl${NS.on[i]?' on':''}" data-i="${i}" aria-label="${n}"></button></div>`).join('');
   $('nlead').innerHTML=[0,5,10,15].map(m=>`<button class="chip${NS.lead===m?' on':''}" data-m="${m}">${m?ar(m)+' دقيقة قبل':'عند الأذان'}</button>`).join('');
-  $('nsnd').classList.toggle('on',!!NS.snd);[0,1].forEach(i=>$('nad'+i).classList.toggle('on',!!(NS.ad&&NS.ad[i])));
+  $('nsnd').classList.toggle('on',!!NS.snd);[0,1].forEach(i=>$('nad'+i).classList.toggle('on',!!(NS.ad&&NS.ad[i])));$('nsl').classList.toggle('on',!!NS.sl);
   $('nst').textContent=NATIVE?(NATOK?'الإشعارات مفعّلة وهتجيلك حتى والتطبيق مقفول وبدون إنترنت.':'اضغط تفعيل الإشعارات للسماح بها.'):('Notification' in window)?(Notification.permission==='granted'?(TRIG?'الإشعارات مفعّلة وتعمل حتى والتطبيق مقفول وبدون إنترنت.':'الإشعارات مفعّلة، لكنها تعمل والصفحة مفتوحة فقط على هذا الجهاز/المتصفح.'):Notification.permission==='denied'?'الإشعارات محظورة من إعدادات المتصفح.':'اضغط تفعيل الإشعارات للسماح بها.'):'المتصفح لا يدعم الإشعارات، سيعمل الصوت والاهتزاز فقط.';
 }
 $('nl').onclick=e=>{const b=e.target.closest('.tgl');if(!b)return;const i=+b.dataset.i;NS.on[i]=NS.on[i]?0:1;b.classList.toggle('on',!!NS.on[i]);saveN()};
 $('nlead').onclick=e=>{const b=e.target.closest('.chip');if(!b)return;NS.lead=+b.dataset.m;saveN();drawNotify()};
 $('nsnd').onclick=()=>{NS.snd=NS.snd?0:1;saveN();drawNotify()};
 [0,1].forEach(i=>$('nad'+i).onclick=()=>{if(!NS.ad)NS.ad=[1,1];NS.ad[i]=NS.ad[i]?0:1;saveN();drawNotify()});
+$('nsl').onclick=()=>{NS.sl=NS.sl?0:1;saveN();drawNotify()};
 const enH=$('en').onclick;
 $('ne').onclick=async()=>{await enH();drawNotify()};
+$('ntest2').onclick=()=>{
+  if(NATIVE){testNative('salawat');return}
+  try{audio=audio||new(window.AudioContext||window.webkitAudioContext)()}catch(e){}
+  if(NS.snd)beep();
+};
 $('ntest').onclick=()=>{
   if(NATIVE){testNative();return}
   try{audio=audio||new(window.AudioContext||window.webkitAudioContext)()}catch(e){}
@@ -884,7 +893,9 @@ async function schedNative(){
     const p=await LN.checkPermissions();NATOK=p.display==='granted';if(!NATOK)return false;
     const ios=CAPJ.getPlatform()==='ios';
     if(!ios){
-      await LN.createChannel({id:'adhan_v1',name:'الأذان',description:'تنبيهات مواقيت الصلاة',importance:5,sound:'adhan.wav',vibration:true,visibility:1});
+      try{await LN.deleteChannel({id:'adhan_v1'})}catch(e){}
+      await LN.createChannel({id:'adhan_v2',name:'الأذان',description:'تنبيهات مواقيت الصلاة',importance:5,sound:'adhan.mp3',vibration:true,visibility:1});
+      await LN.createChannel({id:'salawat_v1',name:'الصلاة على النبي',description:'تذكير الصلاة على النبي كل ٥ دقايق',importance:4,sound:'salawat.mp3',vibration:false,visibility:1});
       await LN.createChannel({id:'adhkar_v1',name:'الأذكار',description:'تذكير أذكار الصباح والمساء',importance:4,vibration:true,visibility:1});
     }
     const pend=await LN.getPending();
@@ -895,7 +906,7 @@ async function schedNative(){
       ts.forEach((x,i)=>{
         if(NS&&!NS.on[i])return;
         const at=x.t.getTime()-lead*6e4;if(at<=now)return;
-        list.push(Object.assign({id:id++,title:lead?'بقي '+lead+' دقيقة على صلاة '+x.n:'حان الآن موعد صلاة '+x.n,body:lead?'استعد للصلاة':'حيّ على الصلاة',schedule:{at:new Date(at),allowWhileIdle:true},channelId:'adhan_v1',extra:{go:'home'}},ios?{sound:'adhan.wav'}:{}));
+        list.push(Object.assign({id:id++,title:lead?'بقي '+lead+' دقيقة على صلاة '+x.n:'حان الآن موعد صلاة '+x.n,body:lead?'استعد للصلاة':'حيّ على الصلاة',schedule:{at:new Date(at),allowWhileIdle:true},channelId:'adhan_v2',extra:{go:'home'}},ios?{sound:'adhan.mp3'}:{}));
       });
       [[0,0,'أذكار الصباح','sabah'],[1,2,'أذكار المساء','masaa']].forEach(([k,pi,t,cat])=>{
         if(NS&&NS.ad&&!NS.ad[k])return;
@@ -903,15 +914,27 @@ async function schedNative(){
         list.push({id:id++,title:t,body:'حان وقت '+t+'، ولو دقيقتين.',schedule:{at:new Date(at),allowWhileIdle:true},channelId:'adhkar_v1',extra:{go:'adhkar',cat:cat}});
       });
     }
+    if(NS&&NS.sl){
+      const SL_MIN=5,SL_N=288;
+      const prayers=[];for(let d=0;d<3;d++)timesFor(...cairoYMD(new Date(now),d)).filter(x=>x.n!=='الشروق').forEach(x=>prayers.push(x.t.getTime()));
+      let t0=Math.ceil((now+60000)/(SL_MIN*6e4))*SL_MIN*6e4,sid=100000;
+      for(let k=0;k<SL_N;k++){
+        const at=t0+k*SL_MIN*6e4;
+        if(prayers.some(pt=>at>=pt-60000&&at<=pt+3*6e4))continue;
+        list.push({id:sid++,title:'اللهم صلّ وسلّم على نبينا محمد',body:'صلّ على النبي ﷺ',schedule:{at:new Date(at),allowWhileIdle:true},channelId:'salawat_v1',group:'salawat',extra:{go:'home'}});
+      }
+    }
     if(!list.length)return false;
     await LN.schedule({notifications:list});
     return true;
   }catch(e){return false}
 }
-async function testNative(){
+async function testNative(kind){
   if(!(await nativePerm()))return;
   const ios=CAPJ.getPlatform()==='ios';
-  await LN.schedule({notifications:[Object.assign({id:999999,title:'تنبيه تجريبي',body:'التنبيهات تعمل بشكل صحيح',schedule:{at:new Date(Date.now()+5000),allowWhileIdle:true},channelId:'adhan_v1'},ios?{sound:'adhan.wav'}:{})]});
+  const sl=kind==='salawat';
+  if(!ios){try{await LN.createChannel({id:'adhan_v2',name:'الأذان',description:'تنبيهات مواقيت الصلاة',importance:5,sound:'adhan.mp3',vibration:true,visibility:1});await LN.createChannel({id:'salawat_v1',name:'الصلاة على النبي',description:'تذكير الصلاة على النبي كل ٥ دقايق',importance:4,sound:'salawat.mp3',vibration:false,visibility:1})}catch(e){}}
+  await LN.schedule({notifications:[Object.assign({id:sl?999998:999999,title:sl?'اللهم صلّ وسلّم على نبينا محمد':'تنبيه تجريبي',body:sl?'تجربة صوت الصلاة على النبي':'التنبيهات تعمل بشكل صحيح',schedule:{at:new Date(Date.now()+5000),allowWhileIdle:true},channelId:sl?'salawat_v1':'adhan_v2'},ios?{sound:sl?'salawat.mp3':'adhan.mp3'}:{})]});
   $('nst').textContent='هيجيلك تنبيه بعد ٥ ثواني. اقفل الشاشة أو اخرج من التطبيق وجرّب.';
 }
 if(NATIVE){LN.addListener('localNotificationActionPerformed',e=>{try{const x=(e.notification&&e.notification.extra)||{};if(x.cat)AC=x.cat;show(x.go||'home')}catch(_){}})}
